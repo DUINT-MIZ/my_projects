@@ -452,26 +452,6 @@ struct static_profile {
     }
 };
 
-struct static_profile_context {
-    private :
-    bool is_called = false;
-    uint count_called = 0;
-    template <size_t identifier_count, size_t posarg_count> friend class static_parser;
-    
-    public :
-    
-    iterator_array<const char*> values;
-    std::function<void(static_profile)> func = [](static_profile _){};
-
-    static_profile_context() = delete;
-    template <typename... Args>
-    static_profile_context(Args&&... iterator_array_constructor_arg) 
-        : values(std::forward<Args>(iterator_array_constructor_arg)...) {}
-
-    bool called() const noexcept { return is_called; }
-    uint call_count() const noexcept { return count_called; }
-};
-
 template <size_t identifier_count, size_t posarg_count>
 class static_parser {
 private:

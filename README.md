@@ -1,0 +1,1 @@
+**This is a project were I attempt almost anything in order to study, and in order to make a working mini bash**
