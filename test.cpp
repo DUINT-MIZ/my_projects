@@ -1,20 +1,10 @@
-#include "include/bash_utils/wording.hpp"
-#include <iostream>
+#include <frozen/unordered_map.h>
+#include <string_view>
 
-int main(int argc, const char* argv[]) {
-    if(argc <= 1) {
-        std::cout << "No input..." << std::endl;
-        return 1;
-    }
-    const char* suggestions[] = {
-        "abide",
-        "abore",
-        "abort",
-        "about"
-    };
+constexpr auto map = frozen::make_unordered_map<std::string_view, int>({
+    {"abc", 10}
+});
 
-    auto res = wording::suggestion_make_tree(&suggestions[0], &suggestions[3]);
-    std::cerr << "root pointer : " << (void*)res.root << std::endl;
-    wording::print_suggestion(res.root, argv[1]);
-    return 0;
+int main() {
+
 }
