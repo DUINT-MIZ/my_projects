@@ -28,8 +28,8 @@ struct ConstructingProfile {
     private :
     NameType lname = nullptr;
     NameType sname = nullptr;
-    WholeNumT positional_order = 0; // Actual order is positional_order - 1
     WholeNumT narg = 0;
+    NumT positional_order = 0; 
     NumT exclude_point = -1;
     WholeNumT call_limit = 1;
     FlagType behave = 0;
@@ -47,13 +47,26 @@ struct ConstructingProfile {
                 throw comtime_except("Empty long name are forbidden on posarg");
             if(!narg)
                 throw comtime_except("Empty narg are forbidden on posarg");
+            if(exclude_point >= 0)
+                throw comtime_except("Posarg shouldn't have an exclusion point");
+            if(not valid_posarg_name(lname))
+                throw comtime_except("Invalid posarg name format");
+        } else {
+            if(lname and not valid_long_opt_name(lname, '-'))
+                throw comtime_except("Invalid long option name format");
+            if(sname and not valid_short_opt_name(sname, '-'))
+                throw comtime_except("Invalid short option name format");
         }
 
         if(narg and (convert_code == TypeCode::NONE))
             throw comtime_except("Convert code of NONE with narg of non-0 are forbidden");
 
+        if(convert_code == TypeCode::ARRAY)
+            throw comtime_except("Typecode ARRAY doesn't specify any type to convert");
+
         if(!call_limit)
             throw comtime_except("Call limit of 0 are forbidden");
+
     }
 
     friend static_profile;
@@ -77,7 +90,7 @@ struct ConstructingProfile {
         return *this;
     }
 
-    constexpr ConstructingProfile& order(WholeNumT pos) noexcept {
+    constexpr ConstructingProfile& order(NumT pos) noexcept {
         positional_order = pos;
         return *this;
     }
@@ -107,10 +120,16 @@ struct ConstructingProfile {
         return *this;
     }
 
+    constexpr ConstructingProfile& exclude_on(NumT point) noexcept {
+        exclude_point = point;
+        return *this;
+    }
+    
+
     constexpr NameType get_lname() const noexcept { return lname; }
     constexpr NameType get_sname() const noexcept { return sname; }
     constexpr WholeNumT expectations() const noexcept { return narg; }
-    constexpr WholeNumT pos_order() const noexcept { return positional_order; }
+    constexpr NumT pos_order() const noexcept { return positional_order; }
     constexpr WholeNumT limit_of_call() const noexcept { return call_limit; }
     constexpr bool is_a_posarg() const noexcept { return posarg; }
     constexpr int exclusion_point() const noexcept { return exclude_point; }
@@ -124,15 +143,15 @@ struct static_profile {
     const NameType sname = nullptr;
     const WholeNumT call_limit = 1;
     const WholeNumT narg = 0;
-    const WholeNumT positional_order = 0;
+    const NumT positional_order = 0;
     const FlagType behave = 0;
     const NumT exclude_point = -1;
     const TypeCode convert_code = TypeCode::NONE;
-    const bool posarg = false;
+    const bool is_posarg = false;
 
     static_profile() = delete;
     constexpr static_profile(const ConstructingProfile& construct_prof)
-    :   posarg(construct_prof.is_a_posarg()),
+    :   is_posarg(construct_prof.is_a_posarg()),
         lname(construct_prof.get_lname()),
         sname(construct_prof.get_sname()),  
         narg(construct_prof.expectations()),
@@ -146,6 +165,7 @@ struct static_profile {
     constexpr static_profile(const static_profile& oth) = default;
 };
 struct modifiable_profile {
+    bool is_called = false;
     WholeNumT call_count = 0;
     WholeNumT fulfilled_args = 0;
     #ifdef STATIC_PARSER_NO_HEAP
@@ -157,7 +177,8 @@ struct modifiable_profile {
     BoundValue bval;
     WholeNumT call_frequent() const noexcept { return call_count; }
     template <typename T>
-    modifiable_profile& bind(T& var) { val.bind(var); return *this; }
+    modifiable_profile& bind(T& var) { bval.bind(var); return *this; }
+    modifiable_profile& bind(const pointing_arr& arr) { bval.bind(arr); return *this; }
     modifiable_profile& set_callback(FunctionType&& func) { callback = func; return *this; }
 };
 

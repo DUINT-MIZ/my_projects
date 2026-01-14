@@ -6,6 +6,7 @@
 #include <variant>
 #include <type_traits>
 #include <span>
+#include "exceptions.hpp"
 
 enum class TypeCode {
 	INT,
@@ -44,7 +45,10 @@ struct unwrap_reference<std::reference_wrapper<T>> { using type = T; };
 using IntT = int;
 using DobT = double;
 using StrT = const char*;
-using Blob = alignas(double) char[maximum<DobT, IntT, StrT>()];
+
+struct alignas(double) Blob {
+    char data[maximum<DobT, IntT, StrT>()];
+};
 
 using IntRef = std::reference_wrapper<IntT>;
 using DobRef = std::reference_wrapper<DobT>;
@@ -55,7 +59,7 @@ struct pointing_arr {
 	ArrT viewer;
 	std::size_t curr_idx = 0;
 	pointing_arr(const ArrT& view) : viewer(view) {}
-}
+};
 
 class BoundValue {
 	private :
@@ -68,24 +72,31 @@ class BoundValue {
 	>;
 
 	ValueType value;
+	bool var_ref_is_filled = false;
 
 	static bool fill_fail(void* _, BoundValue& __, TypeCode ___) { return false; }
 
 	static bool fill_int(void* val, BoundValue& ins, TypeCode _) {
+		if(ins.var_ref_is_filled) return false;
 		std::get<IntRef>(ins.value).get() =
 			*reinterpret_cast<IntT*>(val);
+		ins.var_ref_is_filled = true;
 		return true;
 	}
 
 	static bool fill_dob(void* val, BoundValue& ins, TypeCode _) {
+		if(ins.var_ref_is_filled) return false;
 		std::get<DobRef>(ins.value).get() =
 			*reinterpret_cast<DobT*>(val);
+		ins.var_ref_is_filled = true;
 		return true;
 	}
 
 	static bool fill_str(void* val, BoundValue& ins, TypeCode _) {
+		if(ins.var_ref_is_filled) return false;
 		std::get<StrRef>(ins.value).get() =
 			*reinterpret_cast<StrT*>(val);
+		ins.var_ref_is_filled = true;
 		return true;
 	}
 
@@ -94,21 +105,28 @@ class BoundValue {
 		if(arr.curr_idx >= arr.viewer.size()) return false;
 		switch(code) {
 		case TypeCode::INT :
-			*reinterpret_cast<IntT>(arr.viewer[arr.curr_idx]) = 
+			*reinterpret_cast<IntT*>(arr.viewer[arr.curr_idx].data) = 
 				*reinterpret_cast<IntT*>(val);
 			break;
 
 		case TypeCode::DOUBLE :
-			*reinterpret_cast<DobT>(arr.viewer[arr.curr_idx]) = 
+			*reinterpret_cast<DobT*>(arr.viewer[arr.curr_idx].data) = 
 				*reinterpret_cast<DobT*>(val);
 			break;
 
 		case TypeCode::STRING :
-			*reinterpret_cast<StrT>(arr.viewer[arr.curr_idx]) =
+			*reinterpret_cast<StrT*>(arr.viewer[arr.curr_idx].data) =
 				*reinterpret_cast<StrT*>(val);
 			break;
 
-		default : return false;
+		default : 
+			#ifdef STATIC_PARSER_NO_HEAP
+			throw ParseError("Unsupported typecode param on BoundValue fill function");
+            #else
+            throw ParseError(
+            	(std::string("Unsupported typecode of ")  + code_to_str(code))
+            	+ " param on BoundValue fill ");
+            #endif
 		}
 		++arr.curr_idx;
 		return true;
@@ -141,15 +159,24 @@ class BoundValue {
 		this->fill_method = fill_arr;
 	}
 
-	bool fill(void* val, TypeCode code) { return fill_method(val, *this, code); }
+	auto opc() { // Open Parsing Context
+		if(std::holds_alternative<pointing_arr>(value)) 
+			std::get<pointing_arr>(value).curr_idx = 0;
+		else
+			var_ref_is_filled = false;
+
+		return [&](void* val, TypeCode code) -> bool
+				{ return fill_method(val, *this, code); };
+	}
+
 
 	template <typename RefWrapperT>
 	unwrap_reference<RefWrapperT>::type& get() {
 		return std::get<RefWrapperT>(value).get();
 	}
 
-	ArrT get_array() {
-		return std::get<pointing_arr>(value).viewer;
+	pointing_arr& get_array() {
+		return std::get<pointing_arr>(value);
 	}
 
 	TypeCode get_code() {
@@ -159,7 +186,7 @@ class BoundValue {
 				if constexpr (std::is_same_v<T, IntRef>) return TypeCode::INT;
 				if constexpr (std::is_same_v<T, DobRef>) return TypeCode::DOUBLE;
 				if constexpr (std::is_same_v<T, StrRef>) return TypeCode::STRING;
-				if constexpr (std::is_same_v<T, ArrT>) return TypeCode::ARRAY;
+				if constexpr (std::is_same_v<T, pointing_arr>) return TypeCode::ARRAY;
 				return TypeCode::NONE;
 			},
 			value

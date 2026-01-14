@@ -1,0 +1,323 @@
+[1mdiff --git a/testing/a.out b/testing/a.out[m
+[1mindex f285a0e..6cedb5e 100755[m
+Binary files a/testing/a.out and b/testing/a.out differ
+[1mdiff --git a/testing/abc.cpp b/testing/abc.cpp[m
+[1mdeleted file mode 100644[m
+[1mindex e820019..0000000[m
+[1m--- a/testing/abc.cpp[m
+[1m+++ /dev/null[m
+[36m@@ -1,13 +0,0 @@[m
+[31m-#include "profiles.hpp"[m
+[31m-#include <iostream>[m
+[31m-[m
+[31m-constexpr static_profile prof([m
+[31m-    ConstructingProfile(true)[m
+[31m-    .expected(3)[m
+[31m-    .long_name("files")[m
+[31m-    .convert_to(TypeCode::INT)[m
+[31m-);[m
+[31m-[m
+[31m-int main() {[m
+[31m-    std::cout << prof.narg << std::endl;[m
+[31m-}[m
+\ No newline at end of file[m
+[1mdiff --git a/testing/exceptions.hpp b/testing/exceptions.hpp[m
+[1mindex 730338a..c29f0af 100644[m
+[1m--- a/testing/exceptions.hpp[m
+[1m+++ b/testing/exceptions.hpp[m
+[36m@@ -4,7 +4,7 @@[m
+ #include <string>[m
+ #endif[m
+ [m
+[31m-class raw_string_exception : std::exception {[m
+[32m+[m[32mclass raw_string_exception : public std::exception {[m
+     private :[m
+     const char* msg;[m
+     public :[m
+[36m@@ -12,38 +12,40 @@[m [mclass raw_string_exception : std::exception {[m
+     const char* what() const noexcept { return msg; }[m
+ };[m
+ [m
+[31m-class string_exception : std::exception {[m
+[32m+[m[32mclass string_exception : public std::exception {[m
+     private :[m
+     std::string msg;[m
+     public :[m
+     string_exception(const std::string& err_msg) : msg(err_msg), std::exception() {}[m
+[32m+[m
+[32m+[m[32m    const char* what() const noexcept { return msg.data(); }[m
+ };[m
+ [m
+[31m-class comtime_except : raw_string_exception {[m
+[32m+[m[32mclass comtime_except : public raw_string_exception {[m
+     public :[m
+     comtime_except(const char* err_msg) : raw_string_exception(err_msg) {};[m
+ };[m
+ [m
+ #ifdef STATIC_PARSER_NO_HEAP[m
+[31m-class ParseError : raw_string_exception {[m
+[32m+[m[32mclass ParseError : public raw_string_exception {[m
+     public :[m
+     ParseError(const char* err_msg) : raw_string_exception(err_msg) {};[m
+ };[m
+ [m
+[31m-class SetupError : raw_string_exception {[m
+[32m+[m[32mclass SetupError : public raw_string_exception {[m
+     public :[m
+     SetupError(const char* err_msg) : raw_string_exception(err_msg) {}[m
+ };[m
+ [m
+ #else[m
+ [m
+[31m-class ParseError : string_exception {[m
+[32m+[m[32mclass ParseError : public string_exception {[m
+     public :[m
+     ParseError(const std::string& err_msg) : string_exception(err_msg) {};[m
+     [m
+ };[m
+ [m
+[31m-class SetupError : string_exception {[m
+[32m+[m[32mclass SetupError : public string_exception {[m
+     public :[m
+     SetupError(const std::string& err_msg) : string_exception(err_msg) {};[m
+ };[m
+[1mdiff --git a/testing/profiles.hpp b/testing/profiles.hpp[m
+[1mindex 7c153ae..28a2ae6 100644[m
+[1m--- a/testing/profiles.hpp[m
+[1m+++ b/testing/profiles.hpp[m
+[36m@@ -28,8 +28,8 @@[m [mstruct ConstructingProfile {[m
+     private :[m
+     NameType lname = nullptr;[m
+     NameType sname = nullptr;[m
+[31m-    WholeNumT positional_order = 0; // Actual order is positional_order - 1[m
+     WholeNumT narg = 0;[m
+[32m+[m[32m    NumT positional_order = 0;[m[41m [m
+     NumT exclude_point = -1;[m
+     WholeNumT call_limit = 1;[m
+     FlagType behave = 0;[m
+[36m@@ -47,13 +47,26 @@[m [mstruct ConstructingProfile {[m
+                 throw comtime_except("Empty long name are forbidden on posarg");[m
+             if(!narg)[m
+                 throw comtime_except("Empty narg are forbidden on posarg");[m
+[32m+[m[32m            if(exclude_point >= 0)[m
+[32m+[m[32m                throw comtime_except("Posarg shouldn't have an exclusion point");[m
+[32m+[m[32m            if(not valid_posarg_name(lname))[m
+[32m+[m[32m                throw comtime_except("Invalid posarg name format");[m
+[32m+[m[32m        } else {[m
+[32m+[m[32m            if(lname and not valid_long_opt_name(lname, '-'))[m
+[32m+[m[32m                throw comtime_except("Invalid long option name format");[m
+[32m+[m[32m            if(sname and not valid_short_opt_name(sname, '-'))[m
+[32m+[m[32m                throw comtime_except("Invalid short option name format");[m
+         }[m
+ [m
+         if(narg and (convert_code == TypeCode::NONE))[m
+             throw comtime_except("Convert code of NONE with narg of non-0 are forbidden");[m
+ [m
+[32m+[m[32m        if(convert_code == TypeCode::ARRAY)[m
+[32m+[m[32m            throw comtime_except("Typecode ARRAY doesn't specify any type to convert");[m
+[32m+[m
+         if(!call_limit)[m
+             throw comtime_except("Call limit of 0 are forbidden");[m
+[32m+[m
+     }[m
+ [m
+     friend static_profile;[m
+[36m@@ -77,7 +90,7 @@[m [mstruct ConstructingProfile {[m
+         return *this;[m
+     }[m
+ [m
+[31m-    constexpr ConstructingProfile& order(WholeNumT pos) noexcept {[m
+[32m+[m[32m    constexpr ConstructingProfile& order(NumT pos) noexcept {[m
+         positional_order = pos;[m
+         return *this;[m
+     }[m
+[36m@@ -107,10 +120,16 @@[m [mstruct ConstructingProfile {[m
+         return *this;[m
+     }[m
+ [m
+[32m+[m[32m    constexpr ConstructingProfile& exclude_on(NumT point) noexcept {[m
+[32m+[m[32m        exclude_point = point;[m
+[32m+[m[32m        return *this;[m
+[32m+[m[32m    }[m
+[32m+[m[41m    [m
+[32m+[m
+     constexpr NameType get_lname() const noexcept { return lname; }[m
+     constexpr NameType get_sname() const noexcept { return sname; }[m
+     constexpr WholeNumT expectations() const noexcept { return narg; }[m
+[31m-    constexpr WholeNumT pos_order() const noexcept { return positional_order; }[m
+[32m+[m[32m    constexpr NumT pos_order() const noexcept { return positional_order; }[m
+     constexpr WholeNumT limit_of_call() const noexcept { return call_limit; }[m
+     constexpr bool is_a_posarg() const noexcept { return posarg; }[m
+     constexpr int exclusion_point() const noexcept { return exclude_point; }[m
+[36m@@ -124,15 +143,15 @@[m [mstruct static_profile {[m
+     const NameType sname = nullptr;[m
+     const WholeNumT call_limit = 1;[m
+     const WholeNumT narg = 0;[m
+[31m-    const WholeNumT positional_order = 0;[m
+[32m+[m[32m    const NumT positional_order = 0;[m
+     const FlagType behave = 0;[m
+     const NumT exclude_point = -1;[m
+     const TypeCode convert_code = TypeCode::NONE;[m
+[31m-    const bool posarg = false;[m
+[32m+[m[32m    const bool is_posarg = false;[m
+ [m
+     static_profile() = delete;[m
+     constexpr static_profile(const ConstructingProfile& construct_prof)[m
+[31m-    :   posarg(construct_prof.is_a_posarg()),[m
+[32m+[m[32m    :   is_posarg(construct_prof.is_a_posarg()),[m
+         lname(construct_prof.get_lname()),[m
+         sname(construct_prof.get_sname()),  [m
+         narg(construct_prof.expectations()),[m
+[36m@@ -146,6 +165,7 @@[m [mstruct static_profile {[m
+     constexpr static_profile(const static_profile& oth) = default;[m
+ };[m
+ struct modifiable_profile {[m
+[32m+[m[32m    bool is_called = false;[m
+     WholeNumT call_count = 0;[m
+     WholeNumT fulfilled_args = 0;[m
+     #ifdef STATIC_PARSER_NO_HEAP[m
+[36m@@ -157,7 +177,8 @@[m [mstruct modifiable_profile {[m
+     BoundValue bval;[m
+     WholeNumT call_frequent() const noexcept { return call_count; }[m
+     template <typename T>[m
+[31m-    modifiable_profile& bind(T& var) { val.bind(var); return *this; }[m
+[32m+[m[32m    modifiable_profile& bind(T& var) { bval.bind(var); return *this; }[m
+[32m+[m[32m    modifiable_profile& bind(const pointing_arr& arr) { bval.bind(arr); return *this; }[m
+     modifiable_profile& set_callback(FunctionType&& func) { callback = func; return *this; }[m
+ };[m
+ [m
+[1mdiff --git a/testing/values.hpp b/testing/values.hpp[m
+[1mindex c423f28..64fc30e 100644[m
+[1m--- a/testing/values.hpp[m
+[1m+++ b/testing/values.hpp[m
+[36m@@ -6,6 +6,7 @@[m
+ #include <variant>[m
+ #include <type_traits>[m
+ #include <span>[m
+[32m+[m[32m#include "exceptions.hpp"[m
+ [m
+ enum class TypeCode {[m
+ 	INT,[m
+[36m@@ -44,7 +45,10 @@[m [mstruct unwrap_reference<std::reference_wrapper<T>> { using type = T; };[m
+ using IntT = int;[m
+ using DobT = double;[m
+ using StrT = const char*;[m
+[31m-using Blob = alignas(double) char[maximum<DobT, IntT, StrT>()];[m
+[32m+[m
+[32m+[m[32mstruct alignas(double) Blob {[m
+[32m+[m[32m    char data[maximum<DobT, IntT, StrT>()];[m
+[32m+[m[32m};[m
+ [m
+ using IntRef = std::reference_wrapper<IntT>;[m
+ using DobRef = std::reference_wrapper<DobT>;[m
+[36m@@ -55,7 +59,7 @@[m [mstruct pointing_arr {[m
+ 	ArrT viewer;[m
+ 	std::size_t curr_idx = 0;[m
+ 	pointing_arr(const ArrT& view) : viewer(view) {}[m
+[31m-}[m
+[32m+[m[32m};[m
+ [m
+ class BoundValue {[m
+ 	private :[m
+[36m@@ -68,24 +72,31 @@[m [mclass BoundValue {[m
+ 	>;[m
+ [m
+ 	ValueType value;[m
+[32m+[m	[32mbool var_ref_is_filled = false;[m
+ [m
+ 	static bool fill_fail(void* _, BoundValue& __, TypeCode ___) { return false; }[m
+ [m
+ 	static bool fill_int(void* val, BoundValue& ins, TypeCode _) {[m
+[32m+[m		[32mif(ins.var_ref_is_filled) return false;[m
+ 		std::get<IntRef>(ins.value).get() =[m
+ 			*reinterpret_cast<IntT*>(val);[m
+[32m+[m		[32mins.var_ref_is_filled = true;[m
+ 		return true;[m
+ 	}[m
+ [m
+ 	static bool fill_dob(void* val, BoundValue& ins, TypeCode _) {[m
+[32m+[m		[32mif(ins.var_ref_is_filled) return false;[m
+ 		std::get<DobRef>(ins.value).get() =[m
+ 			*reinterpret_cast<DobT*>(val);[m
+[32m+[m		[32mins.var_ref_is_filled = true;[m
+ 		return true;[m
+ 	}[m
+ [m
+ 	static bool fill_str(void* val, BoundValue& ins, TypeCode _) {[m
+[32m+[m		[32mif(ins.var_ref_is_filled) return false;[m
+ 		std::get<StrRef>(ins.value).get() =[m
+ 			*reinterpret_cast<StrT*>(val);[m
+[32m+[m		[32mins.var_ref_is_filled = true;[m
+ 		return true;[m
+ 	}[m
+ [m
+[36m@@ -94,21 +105,28 @@[m [mclass BoundValue {[m
+ 		if(arr.curr_idx >= arr.viewer.size()) return false;[m
+ 		switch(code) {[m
+ 		case TypeCode::INT :[m
+[31m-			*reinterpret_cast<IntT>(arr.viewer[arr.curr_idx]) = [m
+[32m+[m			[32m*reinterpret_cast<IntT*>(arr.viewer[arr.curr_idx].data) =[m[41m [m
+ 				*reinterpret_cast<IntT*>(val);[m
+ 			break;[m
+ [m
+ 		case TypeCode::DOUBLE :[m
+[31m-			*reinterpret_cast<DobT>(arr.viewer[arr.curr_idx]) = [m
+[32m+[m			[32m*reinterpret_cast<DobT*>(arr.viewer[arr.curr_idx].data) =[m[41m [m
+ 				*reinterpret_cast<DobT*>(val);[m
+ 			break;[m
+ [m
+ 		case TypeCode::STRING :[m
+[31m-			*reinterpret_cast<StrT>(arr.viewer[arr.curr_idx]) =[m
+[32m+[m			[32m*reinterpret_cast<StrT*>(arr.viewer[arr.curr_idx].data) =[m
+ 				*reinterpret_cast<StrT*>(val);[m
+ 			break;[m
+ [m
+[31m-		default : return false;[m
+[32m+[m		[32mdefault :[m[41m [m
+[32m+[m			[32m#ifdef STATIC_PARSER_NO_HEAP[m
+[32m+[m			[32mthrow ParseError("Unsupported typecode param on BoundValue fill function");[m
+[32m+[m[32m            #else[m
+[32m+[m[32m            throw ParseError([m
+[32m+[m[41m            [m	[32m(std::string("Unsupported typecode of ")  + code_to_str(code))[m
+[32m+[m[41m            [m	[32m+ " param on BoundValue fill ");[m
+[32m+[m[32m            #endif[m
+ 		}[m
+ 		++arr.curr_idx;[m
+ 		return true;[m
+[36m@@ -141,15 +159,24 @@[m [mclass BoundValue {[m
+ 		this->fill_method = fill_arr;[m
+ 	}[m
+ [m
+[31m-	bool fill(void* val, TypeCode code) { return fill_method(val, *this, code); }[m
+[32m+[m	[32mauto opc() { // Open Parsing Context[m
+[32m+[m		[32mif(std::holds_alternative<pointing_arr>(value))[m[41m [m
+[32m+[m			[32mstd::get<pointing_arr>(value).curr_idx = 0;[m
+[32m+[m		[32melse[m
+[32m+[m			[32mvar_ref_is_filled = false;[m
+[32m+[m
+[32m+[m		[32mreturn [&](void* val, TypeCode code) -> bool[m
+[32m+[m				[32m{ return fill_method(val, *this, code); };[m
+[32m+[m	[32m}[m
+[32m+[m
+ [m
+ 	template <typename RefWrapperT>[m
+ 	unwrap_reference<RefWrapperT>::type& get() {[m
+ 		return std::get<RefWrapperT>(value).get();[m
+ 	}[m
+ [m
+[31m-	ArrT get_array() {[m
+[31m-		return std::get<pointing_arr>(value).viewer;[m
+[32m+[m	[32mpointing_arr& get_array() {[m
+[32m+[m		[32mreturn std::get<pointing_arr>(value);[m
+ 	}[m
+ [m
+ 	TypeCode get_code() {[m
+[36m@@ -159,7 +186,7 @@[m [mclass BoundValue {[m
+ 				if constexpr (std::is_same_v<T, IntRef>) return TypeCode::INT;[m
+ 				if constexpr (std::is_same_v<T, DobRef>) return TypeCode::DOUBLE;[m
+ 				if constexpr (std::is_same_v<T, StrRef>) return TypeCode::STRING;[m
+[31m-				if constexpr (std::is_same_v<T, ArrT>) return TypeCode::ARRAY;[m
+[32m+[m				[32mif constexpr (std::is_same_v<T, pointing_arr>) return TypeCode::ARRAY;[m
+ 				return TypeCode::NONE;[m
+ 			},[m
+ 			value[m
