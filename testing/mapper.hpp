@@ -5,12 +5,12 @@
 #include <utility>
 #include <frozen/unordered_map.h>
 #include <frozen/string.h>
+#include <type_traits>
 
 #include "exceptions.hpp"
 #include "profiles.hpp"
 
-template <typename T>
-concept IsProfile = std::is_same_v<std::decay_t<T>, ConstructingProfile>;
+
 
 template <std::size_t ProfCount, std::size_t PosargCount>
 class ProfileTable {
@@ -20,9 +20,9 @@ class ProfileTable {
     public :
     const std::array<static_profile, ProfCount> static_profiles;
     ProfileTable() = delete;
-    template<IsProfile... Prof>
-    constexpr ProfileTable(Prof&&... raw_rule)
-    : static_profiles({ raw_rule... })
+    template<DenotedProfile... Prof>
+    constexpr ProfileTable(const Prof&... raw_rule)
+    : static_profiles({ (raw_rule.profile())... })
     {
         std::size_t curr_posarg_i = 0;
         std::size_t existing_posarg = 0;
@@ -192,48 +192,32 @@ class RuntimeMapper {
     }
 };
 
-template <std::size_t N>
-constexpr std::size_t get_size(const frozen::unordered_map<frozen::string, const static_profile*, N>& _)
-{
-    return N;
-}
 
-template <std::size_t N>
-constexpr std::size_t count_ids(const std::array<static_profile, N>&  profiles) {
-    std::size_t ids = 0;
-    for(const auto& prof : profiles) {
-        if(prof.lname) ++ids;
-        if(prof.sname) ++ids;
-    }
-    return ids;
-}
-
-
-template <std::size_t N, std::size_t... Is>
-constexpr auto make_map_pairs(
-    const std::array<std::pair<NameType, const static_profile*>, N>& arr,
+template <std::size_t IDCount, std::size_t... Is>
+constexpr auto
+make_map_pairs(
+    std::array<std::pair<NameType, const static_profile*>, IDCount>& extracted,
     std::index_sequence<Is...>
 ) {
-    return std::array<std::pair<frozen::string, const static_profile*>, N>({
-        {frozen::string(arr[Is].first), arr[Is].second}...
-    });
+    return std::array<std::pair<frozen::string, const static_profile*>, IDCount>
+    {{
+        {frozen::string(extracted[Is].first), extracted[Is].second}...
+    }};
 }
 
-template <typename PtableGetF>
-constexpr auto make_map(PtableGetF ptable_get) {
-    constexpr auto& ptable = ptable_get();
-    constexpr std::size_t ids = count_ids(ptable.static_profiles);
-    std::array<std::pair<NameType, const static_profile*>, ids> pairs{};
-    std::size_t i = 0;
-    for(const auto& prof : ptable.static_profiles) {
-        if(prof.lname) pairs[i++] = {prof.lname, &prof};
-        if(prof.sname) pairs[i++] = {prof.sname, &prof};
+template <std::size_t IDCount>
+constexpr
+frozen::unordered_map<frozen::string, const static_profile*, IDCount>
+make_map(const std::span<const static_profile>& profiles) { 
+    std::array<std::pair<NameType, const static_profile*>, IDCount> extracted{};
+    std::size_t curr_idx = 0;
+    for(const auto& prof : profiles) {
+        if(prof.lname) extracted[curr_idx++] = {prof.lname, &prof};
+        if(prof.sname) extracted[curr_idx++] = {prof.sname, &prof};
     }
-    return frozen::make_unordered_map<frozen::string, const static_profile*>(make_map_pairs(pairs, std::make_index_sequence<ids>{}));
-}
 
-template <typename PtableGetF>
-constexpr auto make_mapper(PtableGetF ptable_get) {
-    constexpr auto map = make_map(ptable_get);
-    return Mapper<get_size(map)>(map, ptable_get());
+    return 
+    frozen::make_unordered_map<frozen::string, const static_profile*>(
+        make_map_pairs(extracted, std::make_index_sequence<IDCount>{})
+    );
 }

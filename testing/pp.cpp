@@ -2,49 +2,44 @@
 #include <array>
 #include <frozen/unordered_map.h>
 #include <frozen/string.h>
+#include <variant>
 
-constexpr ProfileTable<2, 0> table(
-    ConstructingProfile(false)
-    .long_name("--help")
-    .short_name("-h")
-    .expected(0)
-    .restricted()
-    .immediate(),
-    ConstructingProfile(false)
-    .long_name("--int")
-    .short_name("-i")
-    .expected(1)
-    .convert_to(TypeCode::DOUBLE)
+template <std::size_t IDCount, std::size_t ProfCount, std::size_t PosargCount>
+struct Context {
+    static constexpr std::size_t id_count = IDCount;
+    static constexpr std::size_t prof_count = ProfCount;
+    static constexpr std::size_t posarg_count = PosargCount;
+    ProfileTable<ProfCount, PosargCount> ptable;
+    Mapper<IDCount> mapper;
+    template <DenotedProfile... Prof>
+    constexpr Context(const Prof&... prof)
+    : ptable(prof...),
+      mapper(make_map<IDCount>(ptable.static_profiles), ptable)
+    {}
+};
+
+template <DenotedProfile... Prof>
+constexpr std::size_t count_posargs() noexcept {
+    std::size_t dummy = 0;
+    std::size_t posarg_count = 0;
+    ((Prof::is_posarg_type::value ? ++posarg_count : ++dummy), ...);
+    return posarg_count;
+}
+
+template <DenotedProfile... Prof>
+constexpr auto make_context(const Prof&... prof) {
+    constexpr std::size_t ids = (Prof::id_count + ...);
+    constexpr std::size_t posarg_count = count_posargs<Prof...>();
+    constexpr std::size_t profile_count = sizeof...(Prof);
+
+    return Context<ids, profile_count, posarg_count>(prof...);
+}
+
+
+constexpr auto context = make_context(
+    snOption()["-h"].nargs(0).convert(TypeCode::NONE)
 );
 
-constexpr auto smapper = make_mapper([]() -> const auto& { return table; });
-
-void show_help(static_profile _, modifiable_profile& __) {
-    std::cout << "Help message !" << std::endl;
-    std::exit(0);
-}
-
-void int_called(static_profile _, modifiable_profile& __) {
-    std::cout << "Deint was called !" << std::endl;
-}
-
 int main(int argc, const char* argv[]) {
-    
-    std::array<Blob, 10> int_buff{};
-    std::array<modifiable_profile, 2> mod_profs{
-        modifiable_profile()
-        .set_callback(show_help),
-        modifiable_profile()
-        .bind(pointing_arr(int_buff))
-        .set_callback(int_called)
-    };
-
-    RuntimeMapper<4> rmapper(smapper, mod_profs);
-    
-    parse(rmapper, ++argv, --argc, DumpSize<0>{});
-    std::cout << "int val : ";
-    for(auto& blob : int_buff) {
-        std::cout << *reinterpret_cast<double*>(blob.data) << ", ";
-    }
-    std::cout << std::endl;
+    std::cout << "size : " << context.mapper.profiles.size() << std::endl;
 }   

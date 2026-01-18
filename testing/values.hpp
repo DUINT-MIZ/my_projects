@@ -46,9 +46,7 @@ using IntT = int;
 using DobT = double;
 using StrT = const char*;
 
-struct alignas(double) Blob {
-    char data[maximum<DobT, IntT, StrT>()];
-};
+using Blob = std::variant<std::monostate, IntT, DobT, StrT>;
 
 using IntRef = std::reference_wrapper<IntT>;
 using DobRef = std::reference_wrapper<DobT>;
@@ -105,18 +103,15 @@ class BoundValue {
 		if(arr.curr_idx >= arr.viewer.size()) return false;
 		switch(code) {
 		case TypeCode::INT :
-			*reinterpret_cast<IntT*>(arr.viewer[arr.curr_idx].data) = 
-				*reinterpret_cast<IntT*>(val);
+			arr.viewer[arr.curr_idx] = *reinterpret_cast<IntT*>(val);
 			break;
 
 		case TypeCode::DOUBLE :
-			*reinterpret_cast<DobT*>(arr.viewer[arr.curr_idx].data) = 
-				*reinterpret_cast<DobT*>(val);
+			arr.viewer[arr.curr_idx] = *reinterpret_cast<DobT*>(val);
 			break;
 
 		case TypeCode::STRING :
-			*reinterpret_cast<StrT*>(arr.viewer[arr.curr_idx].data) =
-				*reinterpret_cast<StrT*>(val);
+			arr.viewer[arr.curr_idx] = *reinterpret_cast<StrT*>(val);
 			break;
 
 		default : 

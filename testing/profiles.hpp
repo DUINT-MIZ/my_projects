@@ -3,6 +3,7 @@
 #include "values.hpp"
 #include "utils.hpp"
 #include <cstdint>
+#include <type_traits>  
 
 #ifndef STATIC_PARSER_NO_HEAP
 #include <functional>
@@ -58,8 +59,11 @@ struct ConstructingProfile {
                 throw comtime_except("Invalid short option name format");
         }
 
-        if(narg and (convert_code == TypeCode::NONE))
-            throw comtime_except("Convert code of NONE with narg of non-0 are forbidden");
+        if(!narg and (convert_code != TypeCode::NONE))
+            throw comtime_except("No narg specified shouldn't have a non-NONE convert_code");
+        else if (narg and (convert_code == TypeCode::NONE))
+            throw comtime_except("narg are specified, convert_code shouldn't be NONE");
+
 
         if(convert_code == TypeCode::ARRAY)
             throw comtime_except("Typecode ARRAY doesn't specify any type to convert");
@@ -73,68 +77,185 @@ struct ConstructingProfile {
 
     public :
 
-    constexpr ConstructingProfile(bool is_a_posarg) : posarg(is_a_posarg) {}
-
-    constexpr ConstructingProfile& required() noexcept {
-        behave |= kRequired;
+    constexpr ConstructingProfile& identifier(NameType new_lname, NameType new_sname) {
+        lname = new_lname;
+        sname = new_sname;
         return *this;
     }
 
-    constexpr ConstructingProfile& immediate() noexcept {
-        behave |= kImmediate;
+    constexpr ConstructingProfile& behavior(FlagType flag) {
+        behave |= flag;
         return *this;
     }
 
-    constexpr ConstructingProfile& restricted() noexcept {
-        behave |= kRestricted;
-        return *this;
-    }
-
-    constexpr ConstructingProfile& order(NumT pos) noexcept {
-        positional_order = pos;
-        return *this;
-    }
-
-    constexpr ConstructingProfile& long_name(NameType name) noexcept {
-        lname = name;
-        return *this;
-    }
-
-    constexpr ConstructingProfile& short_name(NameType name) noexcept {
-        sname = name;
-        return *this;
-    }
-
-    constexpr ConstructingProfile& expected(WholeNumT new_narg) noexcept {
-        narg = new_narg;
-        return *this;
-    }
-
-    constexpr ConstructingProfile& limit_call(WholeNumT lim) noexcept {
-        call_limit = lim;
-        return *this;
-    }
-
-    constexpr ConstructingProfile& convert_to(TypeCode code) noexcept {
+    constexpr ConstructingProfile& convert_to(TypeCode code) {
         convert_code = code;
         return *this;
     }
 
-    constexpr ConstructingProfile& exclude_on(NumT point) noexcept {
-        exclude_point = point;
+    constexpr ConstructingProfile& set_nargs(WholeNumT new_narg) {
+        narg = new_narg;
         return *this;
     }
     
+    constexpr ConstructingProfile& is_posarg(bool v) {
+        posarg = v;
+        return *this;
+    }
+    
+    constexpr ConstructingProfile& pos_order(NumT order) {
+        positional_order = order;
+        return *this;
+    }
 
-    constexpr NameType get_lname() const noexcept { return lname; }
-    constexpr NameType get_sname() const noexcept { return sname; }
-    constexpr WholeNumT expectations() const noexcept { return narg; }
-    constexpr NumT pos_order() const noexcept { return positional_order; }
-    constexpr WholeNumT limit_of_call() const noexcept { return call_limit; }
-    constexpr bool is_a_posarg() const noexcept { return posarg; }
-    constexpr int exclusion_point() const noexcept { return exclude_point; }
-    constexpr FlagType behavior() const noexcept { return behave; }
-    constexpr TypeCode conversion_code() const noexcept { return convert_code; }
+    constexpr ConstructingProfile& limit_call(WholeNumT n) {
+        call_limit = n;
+        return *this;
+    }
+    
+    constexpr ConstructingProfile& exclude_on(NumT pos) {
+        exclude_point = pos;
+        return *this;
+    }
+
+    constexpr const ConstructingProfile& profile() const noexcept { return *this; }
+};
+
+
+template <typename Derived>
+struct BasicOption : protected ConstructingProfile {
+    public :
+
+    using is_posarg_type = std::false_type;
+
+    constexpr BasicOption() : ConstructingProfile() { this->is_posarg(false); }
+
+    constexpr Derived& operator()(NameType name) {
+        this->identifier(name, nullptr);
+        return static_cast<Derived&>(*this);
+    }
+ 
+    constexpr Derived& operator[](NameType name) {
+        this->identifier(nullptr, name);
+        return static_cast<Derived&>(*this);
+    }
+
+    constexpr Derived& call_lim(WholeNumT n) noexcept {
+        this->limit_call(n);
+        return static_cast<Derived&>(*this);
+    }
+
+    constexpr Derived& nargs(WholeNumT n) noexcept {
+        this->set_nargs(n);
+        return static_cast<Derived&>(*this);
+    }
+
+    constexpr Derived& immediate() noexcept {
+        this->behavior(kImmediate);
+        return static_cast<Derived&>(*this);
+    }
+
+    constexpr Derived& required() noexcept {
+        this->behavior(kRequired);
+        return static_cast<Derived&>(*this);
+    }
+
+    constexpr Derived& restricted() noexcept {
+        this->behavior(kRestricted);
+        return static_cast<Derived&>(*this);
+    }
+
+    constexpr Derived& convert(TypeCode code) noexcept {
+        this->convert_to(code);
+        return static_cast<Derived&>(*this);
+    }
+
+    constexpr Derived& exclude(NumT n) noexcept {
+        this->exclude_on(n);
+        return static_cast<Derived&>(*this);
+    }
+
+    constexpr const ConstructingProfile& profile() const noexcept { return *this; }
+};
+
+template <typename Derived>
+struct BasicPosarg : protected ConstructingProfile {
+    public :
+    using is_posarg_type = std::true_type;
+
+    constexpr BasicPosarg() : ConstructingProfile() { this->is_posarg(true); }
+
+    constexpr Derived& operator()(NameType name) noexcept {
+        this->identifier(name, nullptr);
+        return static_cast<Derived&>(*this);
+    }
+
+    constexpr Derived& nargs(WholeNumT n) noexcept {
+        this->set_nargs(n);
+        return static_cast<Derived&>(*this);
+    }
+
+    constexpr Derived& required() noexcept {
+        this->behavior(kRequired);
+        return static_cast<Derived&>(*this);
+    }
+
+    constexpr Derived& restricted() noexcept {
+        this->behavior(kRestricted);
+        return static_cast<Derived&>(*this);
+    }
+
+    constexpr Derived& convert(TypeCode code) noexcept{
+        this->convert_to(code);
+        return static_cast<Derived&>(*this);
+    }
+
+    constexpr Derived& order(NumT pos) noexcept {
+        this->pos_order(pos);
+        return static_cast<Derived&>(*this);
+    }
+
+    constexpr const ConstructingProfile& profile() const noexcept { return *this; }
+};
+
+struct snOption : public BasicOption<snOption> { // sn = singular name
+    private :
+    bool inserted_id = false;
+    public :
+
+    static constexpr int id_count = 1;
+
+    constexpr snOption& operator()(NameType name) {
+        if(inserted_id) throw comtime_except("Can't insert more name, max is 1 for snOption");
+        this->identifier(name, nullptr);
+        inserted_id = true;
+        return *this;
+    }
+ 
+    constexpr snOption& operator[](NameType name) {
+        if(inserted_id) throw comtime_except("Can't insert more name, max is 1 for snOption");
+        this->identifier(nullptr, name);
+        inserted_id = true;
+        return *this;
+    }
+};
+
+struct dnOption : public BasicOption<dnOption> { // dn = Dual Name
+    public : 
+    static constexpr int id_count = 2;
+};
+
+struct Posarg : public BasicPosarg<Posarg> {
+    public :
+    static constexpr int id_count = 1;
+};
+
+
+template <typename T>
+concept DenotedProfile = 
+    (std::derived_from<T, BasicOption<T>> || std::derived_from<T, BasicPosarg<T>>) &&
+    requires() {
+        {T::id_count} -> std::convertible_to<int>;
 };
 
 struct static_profile {
@@ -151,16 +272,18 @@ struct static_profile {
 
     static_profile() = delete;
     constexpr static_profile(const ConstructingProfile& construct_prof)
-    :   is_posarg(construct_prof.is_a_posarg()),
-        lname(construct_prof.get_lname()),
-        sname(construct_prof.get_sname()),  
-        narg(construct_prof.expectations()),
-        call_limit(construct_prof.limit_of_call()),
-        exclude_point(construct_prof.exclusion_point()),
-        behave(construct_prof.behavior()),
-        convert_code(construct_prof.conversion_code()),
-        positional_order(construct_prof.pos_order()) 
-    { construct_prof.verify(); }
+    :   is_posarg(construct_prof.posarg),
+        lname(construct_prof.lname),
+        sname(construct_prof.sname),  
+        narg(construct_prof.narg),
+        call_limit(construct_prof.call_limit),
+        exclude_point(construct_prof.exclude_point),
+        behave(construct_prof.behave),
+        convert_code(construct_prof.convert_code),
+        positional_order(construct_prof.positional_order)
+    {
+        construct_prof.verify();
+    }
 
     constexpr static_profile(const static_profile& oth) = default;
 };
