@@ -8,6 +8,11 @@
 #include <span>
 #include "exceptions.hpp"
 
+namespace sp {
+namespace values {
+
+
+
 enum class TypeCode {
 	INT,
 	STRING,
@@ -116,9 +121,9 @@ class BoundValue {
 
 		default : 
 			#ifdef STATIC_PARSER_NO_HEAP
-			throw ParseError("Unsupported typecode param on BoundValue fill function");
+			throw except::ParseError("Unsupported typecode param on BoundValue fill function");
             #else
-            throw ParseError(
+            throw except::ParseError(
             	(std::string("Unsupported typecode of ")  + code_to_str(code))
             	+ " param on BoundValue fill ");
             #endif
@@ -189,3 +194,5 @@ class BoundValue {
 	}
 };
 
+}
+}

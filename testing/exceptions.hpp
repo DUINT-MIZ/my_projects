@@ -4,6 +4,12 @@
 #include <string>
 #endif
 
+namespace sp {
+
+namespace except {
+
+
+
 class raw_string_exception : public std::exception {
     private :
     const char* msg;
@@ -51,3 +57,5 @@ class SetupError : public string_exception {
 };
 
 #endif
+}
+}

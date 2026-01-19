@@ -1,5 +1,9 @@
 #pragma once
 #include <array>
+namespace sp {
+namespace utils {
+
+
 
 constexpr std::array<bool, 256> identifier_make_table(){
     std::array<bool, 256> data {};
@@ -60,4 +64,7 @@ constexpr bool valid_posarg_name(const char* name)
         name++;
     }
     return true;
+}
+
+}
 }

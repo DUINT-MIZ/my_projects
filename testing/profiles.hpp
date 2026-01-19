@@ -9,7 +9,10 @@
 #include <functional>
 #endif
 
+namespace sp {
+namespace profiles{
 
+using namespace sp;
 using FlagType = std::uint32_t;
 
 static constexpr FlagType kRequired = 1 << 0;
@@ -34,42 +37,42 @@ struct ConstructingProfile {
     NumT exclude_point = -1;
     WholeNumT call_limit = 1;
     FlagType behave = 0;
-    TypeCode convert_code = TypeCode::NONE;
+    values::TypeCode convert_code = values::TypeCode::NONE;
     bool posarg = false;
 
     constexpr void verify() const {
         if(!lname and !sname)
-            throw comtime_except("Empty name is forbidden");
+            throw except::comtime_except("Empty name is forbidden");
 
         if(posarg) {
             if(sname) 
-                throw comtime_except("Posarg shuldn't not have a short name");
+                throw except::comtime_except("Posarg shuldn't not have a short name");
             if(!lname)
-                throw comtime_except("Empty long name are forbidden on posarg");
+                throw except::comtime_except("Empty long name are forbidden on posarg");
             if(!narg)
-                throw comtime_except("Empty narg are forbidden on posarg");
+                throw except::comtime_except("Empty narg are forbidden on posarg");
             if(exclude_point >= 0)
-                throw comtime_except("Posarg shouldn't have an exclusion point");
-            if(not valid_posarg_name(lname))
-                throw comtime_except("Invalid posarg name format");
+                throw except::comtime_except("Posarg shouldn't have an exclusion point");
+            if(not utils::valid_posarg_name(lname))
+                throw except::comtime_except("Invalid posarg name format");
         } else {
-            if(lname and not valid_long_opt_name(lname, '-'))
-                throw comtime_except("Invalid long option name format");
-            if(sname and not valid_short_opt_name(sname, '-'))
-                throw comtime_except("Invalid short option name format");
+            if(lname and not utils::valid_long_opt_name(lname, '-'))
+                throw except::comtime_except("Invalid long option name format");
+            if(sname and not utils::valid_short_opt_name(sname, '-'))
+                throw except::comtime_except("Invalid short option name format");
         }
 
-        if(!narg and (convert_code != TypeCode::NONE))
-            throw comtime_except("No narg specified shouldn't have a non-NONE convert_code");
-        else if (narg and (convert_code == TypeCode::NONE))
-            throw comtime_except("narg are specified, convert_code shouldn't be NONE");
+        if(!narg and (convert_code != values::TypeCode::NONE))
+            throw except::comtime_except("No narg specified shouldn't have a non-NONE convert_code");
+        else if (narg and (convert_code == values::TypeCode::NONE))
+            throw except::comtime_except("narg are specified, convert_code shouldn't be NONE");
 
 
-        if(convert_code == TypeCode::ARRAY)
-            throw comtime_except("Typecode ARRAY doesn't specify any type to convert");
+        if(convert_code == values::TypeCode::ARRAY)
+            throw except::comtime_except("Typecode ARRAY doesn't specify any type to convert");
 
         if(!call_limit)
-            throw comtime_except("Call limit of 0 are forbidden");
+            throw except::comtime_except("Call limit of 0 are forbidden");
 
     }
 
@@ -88,7 +91,7 @@ struct ConstructingProfile {
         return *this;
     }
 
-    constexpr ConstructingProfile& convert_to(TypeCode code) {
+    constexpr ConstructingProfile& convert_to(values::TypeCode code) {
         convert_code = code;
         return *this;
     }
@@ -165,7 +168,7 @@ struct BasicOption : protected ConstructingProfile {
         return static_cast<Derived&>(*this);
     }
 
-    constexpr Derived& convert(TypeCode code) noexcept {
+    constexpr Derived& convert(values::TypeCode code) noexcept {
         this->convert_to(code);
         return static_cast<Derived&>(*this);
     }
@@ -205,7 +208,7 @@ struct BasicPosarg : protected ConstructingProfile {
         return static_cast<Derived&>(*this);
     }
 
-    constexpr Derived& convert(TypeCode code) noexcept{
+    constexpr Derived& convert(values::TypeCode code) noexcept{
         this->convert_to(code);
         return static_cast<Derived&>(*this);
     }
@@ -226,14 +229,14 @@ struct snOption : public BasicOption<snOption> { // sn = singular name
     static constexpr int id_count = 1;
 
     constexpr snOption& operator()(NameType name) {
-        if(inserted_id) throw comtime_except("Can't insert more name, max is 1 for snOption");
+        if(inserted_id) throw except::comtime_except("Can't insert more name, max is 1 for snOption");
         this->identifier(name, nullptr);
         inserted_id = true;
         return *this;
     }
  
     constexpr snOption& operator[](NameType name) {
-        if(inserted_id) throw comtime_except("Can't insert more name, max is 1 for snOption");
+        if(inserted_id) throw except::comtime_except("Can't insert more name, max is 1 for snOption");
         this->identifier(nullptr, name);
         inserted_id = true;
         return *this;
@@ -267,7 +270,7 @@ struct static_profile {
     const NumT positional_order = 0;
     const FlagType behave = 0;
     const NumT exclude_point = -1;
-    const TypeCode convert_code = TypeCode::NONE;
+    const values::TypeCode convert_code = values::TypeCode::NONE;
     const bool is_posarg = false;
 
     static_profile() = delete;
@@ -297,14 +300,17 @@ struct modifiable_profile {
     using FunctionType = std::function<void(static_profile, modifiable_profile&)>;
     #endif
     FunctionType callback = [](static_profile, modifiable_profile&){};
-    BoundValue bval;
+    values::BoundValue bval;
     WholeNumT call_frequent() const noexcept { return call_count; }
     template <typename T>
     modifiable_profile& bind(T& var) { bval.bind(var); return *this; }
-    modifiable_profile& bind(const pointing_arr& arr) { bval.bind(arr); return *this; }
+    modifiable_profile& bind(const values::pointing_arr& arr) { bval.bind(arr); return *this; }
     modifiable_profile& set_callback(FunctionType&& func) { callback = func; return *this; }
 };
 
 const char* get_name(const static_profile& prof) {
     return (prof.lname ? prof.lname : prof.sname);
+}
+
+}
 }

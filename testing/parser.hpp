@@ -8,6 +8,11 @@
 #include "exceptions.hpp"
 #include "values.hpp"
 
+namespace sp {
+
+namespace parser {
+
+using namespace sp;
 
 bool potential_digit(const char* str) {
     int start = 0;
@@ -17,71 +22,71 @@ bool potential_digit(const char* str) {
 
 void from_chars_result_check(const std::from_chars_result& res, std::string_view input) {
     if(res.ec == std::errc::invalid_argument) 
-        throw ParseError(std::string("Input : ").append(input) + ", Is not a number");
+        throw except::ParseError(std::string("Input : ").append(input) + ", Is not a number");
     
     if(res.ec == std::errc::result_out_of_range) {
-        throw ParseError(std::string("Input : ").append(input) + ", Is out of range"); 
+        throw except::ParseError(std::string("Input : ").append(input) + ", Is out of range"); 
     }
 
     if(res.ptr < (input.data() + input.size()))
-        throw ParseError(std::string("Can't fully convert").append(input) + " To a number");
+        throw except::ParseError(std::string("Can't fully convert").append(input) + " To a number");
 }
 
 template <typename FillF>
-bool convert_and_insert(const FillF& fill, std::string_view input, TypeCode code) {
+bool convert_and_insert(const FillF& fill, std::string_view input, values::TypeCode code) {
     if(input.empty())
-        throw ParseError("convert-insert operation failed, input token is empty");
+        throw except::ParseError("convert-insert operation failed, input token is empty");
     
     switch(code) {
-        case TypeCode::DOUBLE :
+        case values::TypeCode::DOUBLE :
             {
-                DobT buff = 0;
+                values::DobT buff = 0;
                 from_chars_result_check(
                     std::from_chars(input.data(), input.data() + input.size(), buff),
                     input
                 );
-                return fill((void*)&buff, TypeCode::DOUBLE);
+                return fill((void*)&buff, values::TypeCode::DOUBLE);
             }
             break;
 
-        case TypeCode::INT :
+        case values::TypeCode::INT :
             {
-                IntT buff = 0;
+                values::IntT buff = 0;
                 from_chars_result_check(
                     std::from_chars(input.data(), input.data() + input.size(), buff),
                     input
                 );
-                return fill((void*)&buff, TypeCode::INT);
+                return fill((void*)&buff, values::TypeCode::INT);
             }
             break;
 
-        case TypeCode::STRING :
+        case values::TypeCode::STRING : 
             if(input[input.size()] != '\0')
-                throw ParseError(std::string("Token : ").append(input) + " Is not null-terminated");
-            return fill((void*)input.data(), TypeCode::STRING);
+                throw except::ParseError(std::string("Token : ").append(input) + " Is not null-terminated");
+            return fill((void*)input.data(), values::TypeCode::STRING);
             break;
 
         default :
-            throw ParseError(std::string("Unknown type code of ") + code_to_str(code));
+            throw except::ParseError(std::string("Unknown type code of ") + code_to_str(code));
         
     }
 }
 
 template <typename ArgGetF>
 std::string_view fetch_and_next(
-    FindPair& complete_prof,
+    mapper::FindPair& complete_prof,
     const ArgGetF& get,
     const std::string_view& eq_value,
     bool (*check_token)(const std::string_view&) = [](const std::string_view& _){ return false; }
 )
 {
-    const static_profile& static_prof = *complete_prof.first;
-    modifiable_profile& mod_prof = *complete_prof.second;
+    const profiles::static_profile& static_prof = *complete_prof.first;
+    profiles::modifiable_profile& mod_prof = *complete_prof.second;
     std::size_t to_parse = static_prof.narg - mod_prof.fulfilled_args;
     std::string_view curr_token;
     auto fill = mod_prof.bval.opc();
     
-    if(((signed)to_parse <= 0) && (is_restricted(static_prof.behave))){
+    if(((signed)to_parse <= 0) && (profiles::is_restricted(static_prof.behave))){
         mod_prof.is_called = true;
         return get();
     }
@@ -111,7 +116,7 @@ std::string_view fetch_and_next(
             !ins_res 
             or (
                 !to_parse 
-                and is_restricted(static_prof.behave)) 
+                and profiles::is_restricted(static_prof.behave)) 
             or curr_token.empty()
             or stop_token_criteria_are_met) {}
         else {
@@ -121,7 +126,7 @@ std::string_view fetch_and_next(
     }
 
     if((signed)to_parse > 0)
-        throw ParseError(
+        throw except::ParseError(
             std::string("Insufficient narg for ") + get_name(static_prof)
             + ", still needs " + std::to_string(to_parse)
         );
@@ -132,7 +137,7 @@ std::string_view fetch_and_next(
 
 template <typename ArgGetF, typename DumpStoreF, std::size_t IDCount>
 void handle_opt(
-    RuntimeMapper<IDCount>& rmap,
+    mapper::RuntimeMapper<IDCount>& rmap,
     const ArgGetF& get, 
     const DumpStoreF& store
 ) {
@@ -149,15 +154,15 @@ void handle_opt(
             curr_token = curr_token.substr(0, eq_idx);
         }
 
-        FindPair complete_prof = rmap[curr_token];
+        mapper::FindPair complete_prof = rmap[curr_token];
         if(!complete_prof.first or !complete_prof.second)
-            throw ParseError(std::string("Unknown flag was passed : ").append(curr_token));
+            throw except::ParseError(std::string("Unknown flag was passed : ").append(curr_token));
         
         curr_token = fetch_and_next(
             complete_prof, get, eq_value,
             [](const std::string_view& token){ return (token[0] == '-'); }
         );
-        if(is_immediate(complete_prof.first->behave))
+        if(profiles::is_immediate(complete_prof.first->behave))
             complete_prof.second->callback(*complete_prof.first, *complete_prof.second);
         if(!eq_value.empty())
             eq_value = std::string_view{};
@@ -165,19 +170,19 @@ void handle_opt(
 }
 
 template <typename DumpGetF, std::size_t IDCount>
-void handle_posarg(const DumpGetF& dump_get, RuntimeMapper<IDCount>& rmap) {
+void handle_posarg(const DumpGetF& dump_get, mapper::RuntimeMapper<IDCount>& rmap) {
     std::size_t curr_posarg_order = 0;
     std::string_view curr_token{};
-    FindPair complete_prof;
+    mapper::FindPair complete_prof;
 
     while(curr_posarg_order < rmap.existing_posarg()) {
-        complete_prof = rmap[PosargIndex(curr_posarg_order)];
+        complete_prof = rmap[mapper::PosargIndex(curr_posarg_order)];
         curr_token = fetch_and_next(complete_prof, dump_get, std::string_view{});
         if(curr_token.empty()) break;
     }
 
     if(!curr_token.empty())
-        throw ParseError(std::string("Unexpected dump inputs of ").append(curr_token));
+        throw except::ParseError(std::string("Unexpected dump inputs of ").append(curr_token));
 }
 
 template<std::size_t N>
@@ -185,7 +190,7 @@ struct DumpSize {};
 
 template <std::size_t IDCount, std::size_t dump_size>
 void parse(
-    RuntimeMapper<IDCount>& rmap,
+    mapper::RuntimeMapper<IDCount>& rmap,
     const char** argv,
     int argc,
     DumpSize<dump_size>
@@ -201,7 +206,7 @@ void parse(
 
     auto dump_store = [&](const std::string_view& token) -> void {
         if(dump_i == dump_size)
-            throw ParseError("Dump inputs exceed dump size");
+            throw except::ParseError("Dump inputs exceed dump size");
         std::cout << "Dump store !" << std::endl;
         dump[dump_i++] = token;
     };
@@ -216,22 +221,25 @@ void parse(
     handle_posarg(dump_get, rmap);
 
     for(std::size_t i{0}; i < rmap.existing_profile(); i++) {
-        FindPair complete_prof = rmap[i];
-        if(is_required(complete_prof.first->behave) and not (complete_prof.second->is_called)) {
-            throw ParseError(
+        mapper::FindPair complete_prof = rmap[i];
+        if(profiles::is_required(complete_prof.first->behave) and not (complete_prof.second->is_called)) {
+            throw except::ParseError(
                 (((std::string("A required ")
                 + (complete_prof.first->is_posarg ? "posarg" : "option")    
                 ) + " of \""
-                ) + get_name(*complete_prof.first)
+                ) + profiles::get_name(*complete_prof.first)
                 ) + "\" was not called"
             );
         }
     }
 
     for(std::size_t i{0}; i < rmap.existing_profile(); i++) {
-        FindPair complete_prof = rmap[i];
+        mapper::FindPair complete_prof = rmap[i];
+        
         if(complete_prof.second->is_called) 
             complete_prof.second->callback(*complete_prof.first, *complete_prof.second);
     }
 }
 
+}
+}

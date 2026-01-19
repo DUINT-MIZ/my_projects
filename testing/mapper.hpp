@@ -10,49 +10,54 @@
 #include "exceptions.hpp"
 #include "profiles.hpp"
 
+namespace sp {
 
+namespace mapper {
+
+using namespace sp;
 
 template <std::size_t ProfCount, std::size_t PosargCount>
 class ProfileTable {
     private :
-    std::array<const static_profile*, PosargCount> posargs{};
+    std::array<const profiles::static_profile*, PosargCount> posargs{};
     
     public :
-    const std::array<static_profile, ProfCount> static_profiles;
+    const std::array<profiles::static_profile, ProfCount> static_profiles;
     ProfileTable() = delete;
-    template<DenotedProfile... Prof>
+    template<profiles::DenotedProfile... Prof>
     constexpr ProfileTable(const Prof&... raw_rule)
     : static_profiles({ (raw_rule.profile())... })
     {
         std::size_t curr_posarg_i = 0;
         std::size_t existing_posarg = 0;
-        const static_profile** spot = nullptr;
+        const profiles::static_profile** spot = nullptr;
 
         for(const auto& prof : static_profiles) {
             if(prof.is_posarg) {
                 if(existing_posarg >= PosargCount)
-                    throw comtime_except("Existing posarg exceed template argument PosargCount");
+                    throw except::comtime_except("Existing posarg exceed template argument PosargCount");
 
                 if(prof.positional_order < 0)
                     spot = &posargs[curr_posarg_i++];
                 else if(prof.positional_order < PosargCount)
                     spot = &posargs[prof.positional_order];
                 else
-                    throw comtime_except("Posarg positional order is out of template argument PosargCount reach");
+                    throw except::comtime_except("Posarg positional order is out of template argument PosargCount reach");
 
                 if(!(*spot))
                     *spot = &prof;
                 else
-                    throw comtime_except("Posarg positional order is occupied by another posarg");
+                    throw except::comtime_except("Posarg positional order is occupied by another posarg");
                 ++existing_posarg;
             }
         }
 
         if(existing_posarg < PosargCount)
-            throw comtime_except("Existing posarg doesn't match template argument PosargCount");
+            throw except::comtime_except("Existing posarg doesn't match template argument PosargCount");
     }
 
-    constexpr const std::array<const static_profile*, PosargCount>& get_posargs() const noexcept { return posargs; }
+    constexpr std::size_t profile_index(const profiles::static_profile* prof) const { return prof - &static_profiles[0]; }
+    constexpr const std::array<const profiles::static_profile*, PosargCount>& get_posargs() const noexcept { return posargs; }
 };
 
 struct PosargIndex {
@@ -63,30 +68,30 @@ struct PosargIndex {
 template <std::size_t IDCount>
 class Mapper {
     private :
-    using MapType = frozen::unordered_map<frozen::string, const static_profile*, IDCount>;
+    using MapType = frozen::unordered_map<frozen::string, const profiles::static_profile*, IDCount>;
     
-    constexpr void verify_connection(const static_profile* target, NameType name) {
+    constexpr void verify_relation(const profiles::static_profile* target, profiles::NameType name) {
         auto it = map.find(frozen::string(name));
         if(it == map.end()) 
-            throw comtime_except("Unknown profile name in map (Forget to register ?)");
+            throw except::comtime_except("Unknown profile name in map (Forget to register ?)");
         if(it->second != target)
-            throw comtime_except("Name in map, points to the wrong profile");
+            throw except::comtime_except("Name in map, points to the wrong profile");
     }
 
     template <std::size_t N>
-    constexpr std::span<const static_profile*> get_ptable_posarg(const std::array<const static_profile*, N>& arr)
+    constexpr std::span<const profiles::static_profile*> get_ptable_posarg(const std::array<const profiles::static_profile*, N>& arr)
     {
         if constexpr  (N == 0) { 
             return {};
         } else {
-            return std::span<const static_profile*>(arr);
+            return std::span<const profiles::static_profile*>(arr);
         }
     }
 
     public :
     const MapType map;
-    const std::span<const static_profile> profiles;
-    const std::span<const static_profile*> posargs;
+    const std::span<const profiles::static_profile> profiles;
+    const std::span<const profiles::static_profile*> posargs;
 
     template <std::size_t ProfCount, std::size_t PosargCount>
     constexpr Mapper(
@@ -97,63 +102,63 @@ class Mapper {
         std::size_t valid_mappings = 0;
         for(const auto& prof : profiles) {
             if(prof.lname) {
-                verify_connection(&prof, prof.lname);
+                verify_relation(&prof, prof.lname);
                 ++valid_mappings;
             }
 
             if(prof.sname) {
-                verify_connection(&prof, prof.sname);
+                verify_relation(&prof, prof.sname);
                 ++valid_mappings;
             }
         }
 
         if(valid_mappings < IDCount)
-            throw comtime_except("Unknown name was assigned to the map");
+            throw except::comtime_except("Unknown name was assigned to the map");
     }
 
-    const static_profile* operator[](std::size_t idx) const noexcept {
+    const profiles::static_profile* operator[](std::size_t idx) const noexcept {
         if(idx >= profiles.size()) return nullptr;
         return &profiles[idx];
     }
 
-    const static_profile* operator[](const PosargIndex& posarg_index) const noexcept {
+    const profiles::static_profile* operator[](const PosargIndex& posarg_index) const noexcept {
         if(posarg_index.val >= posargs.size()) return nullptr;
         return posargs[posarg_index.val];
     }
 
-    const static_profile* operator[](const std::string_view& name) const noexcept {
+    const profiles::static_profile* operator[](const std::string_view& name) const noexcept {
         auto it = map.find(frozen::string(name));
         if(it == map.end()) return nullptr;
         return it->second;
     }
 
-    std::size_t profile_index(const static_profile* target) const noexcept {
+    std::size_t profile_index(const profiles::static_profile* target) const noexcept {
         return (target - &profiles[0]);
     }
 };
 
-using FindPair = std::pair<const static_profile*, modifiable_profile*>;
+using FindPair = std::pair<const profiles::static_profile*, profiles::modifiable_profile*>;
 
 template <std::size_t IDCount>
 class RuntimeMapper {
     private :
-    std::span<modifiable_profile> mutable_profiles;
+    std::span<profiles::modifiable_profile> mutable_profiles;
     public :
     const Mapper<IDCount>& mapper; // const reference in case mapper is compile-time evaluated object
 
     RuntimeMapper(
         const Mapper<IDCount>& new_mapper,
-        const std::span<modifiable_profile> new_mutable_profiles
+        const std::span<profiles::modifiable_profile> new_mutable_profiles
     ) : mutable_profiles(new_mutable_profiles), mapper(new_mapper) 
     {
         if(mutable_profiles.size() != mapper.profiles.size())
             throw std::invalid_argument("mutable profile size doesn't match mapper profile size");
         std::size_t lim = mapper.profiles.size();
         for(std::size_t i = 0; i < lim; i++) {
-            const static_profile& sprof = *mapper[i];
-            modifiable_profile& mprof = mutable_profiles[i];
+            const profiles::static_profile& sprof = *mapper[i];
+            profiles::modifiable_profile& mprof = mutable_profiles[i];
 
-            if(mprof.bval.get_code() != TypeCode::ARRAY) {
+            if(mprof.bval.get_code() != values::TypeCode::ARRAY) {
                 if(mprof.bval.get_code() != sprof.convert_code)
                     throw std::invalid_argument("BoundValue variable reference type is incompatible with static_profile convert code");
                 if(sprof.narg > 1)
@@ -166,19 +171,19 @@ class RuntimeMapper {
     }
 
     FindPair operator[](std::size_t idx) {
-        const static_profile* prof = mapper[idx];
+        const profiles::static_profile* prof = mapper[idx];
         if(!prof) return {nullptr, nullptr};
         return {prof, &mutable_profiles[idx]};
     }
 
     FindPair operator[](const PosargIndex& posarg_index) {
-        const static_profile* prof = mapper[posarg_index];
+        const profiles::static_profile* prof = mapper[posarg_index];
         if(!prof) return {nullptr, nullptr};
         return {prof, &mutable_profiles[mapper.profile_index(prof)]};
     }
 
     FindPair operator[](const std::string_view& name) {
-        const static_profile* prof = mapper[name];
+        const profiles::static_profile* prof = mapper[name];
         if(!prof) return {nullptr, nullptr};
         return {prof, &mutable_profiles[mapper.profile_index(prof)]};
     }
@@ -191,33 +196,5 @@ class RuntimeMapper {
         return mapper.posargs.size();
     }
 };
-
-
-template <std::size_t IDCount, std::size_t... Is>
-constexpr auto
-make_map_pairs(
-    std::array<std::pair<NameType, const static_profile*>, IDCount>& extracted,
-    std::index_sequence<Is...>
-) {
-    return std::array<std::pair<frozen::string, const static_profile*>, IDCount>
-    {{
-        {frozen::string(extracted[Is].first), extracted[Is].second}...
-    }};
 }
-
-template <std::size_t IDCount>
-constexpr
-frozen::unordered_map<frozen::string, const static_profile*, IDCount>
-make_map(const std::span<const static_profile>& profiles) { 
-    std::array<std::pair<NameType, const static_profile*>, IDCount> extracted{};
-    std::size_t curr_idx = 0;
-    for(const auto& prof : profiles) {
-        if(prof.lname) extracted[curr_idx++] = {prof.lname, &prof};
-        if(prof.sname) extracted[curr_idx++] = {prof.sname, &prof};
-    }
-
-    return 
-    frozen::make_unordered_map<frozen::string, const static_profile*>(
-        make_map_pairs(extracted, std::make_index_sequence<IDCount>{})
-    );
 }
