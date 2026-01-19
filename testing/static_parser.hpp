@@ -54,8 +54,14 @@ struct Context {
       mapper(make_map<IDCount>(ptable.static_profiles), ptable)
     {}
 
-    void match(const profiles::modifiable_profile& mprof, const profiles::NameType& name) const {
-        std::size_t index = ptable.profile_index(mapper[name]);
+    profiles::modifiable_profile& match(std::span<profiles::modifiable_profile> mprof, const profiles::NameType& name) const {
+        const profiles::static_profile* prof = mapper[name];
+        if(!prof) 
+            throw std::invalid_argument("Unknown name");
+        std::size_t index = ptable.profile_index(prof);
+        if(index >= mprof.size())
+            throw std::invalid_argument("mprof is out of range");
+        return mprof[index];
     }
 };
 
