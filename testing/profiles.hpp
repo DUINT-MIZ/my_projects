@@ -2,18 +2,16 @@
 #include "exceptions.hpp"
 #include "values.hpp"
 #include "utils.hpp"
+#include "commons.hpp"
 #include <cstdint>
-#include <type_traits>  
+#include <type_traits>
 
-#ifndef STATIC_PARSER_NO_HEAP
 #include <functional>
-#endif
 
 namespace sp {
 namespace profiles{
 
 using namespace sp;
-using FlagType = std::uint32_t;
 
 static constexpr FlagType kRequired = 1 << 0;
 static constexpr FlagType kRestricted = 1 << 1;
@@ -23,9 +21,7 @@ constexpr bool is_required(FlagType flag) { return ((flag & kRequired) != 0); }
 constexpr bool is_restricted(FlagType flag) { return ((flag & kRestricted) != 0); }
 constexpr bool is_immediate(FlagType flag) { return ((flag & kImmediate) != 0); }
 
-using NameType = const char*;
-using WholeNumT = std::uint32_t;
-using NumT = std::int32_t;
+
 struct static_profile;
 
 struct ConstructingProfile {
@@ -275,15 +271,16 @@ struct static_profile {
 
     static_profile() = delete;
     constexpr static_profile(const ConstructingProfile& construct_prof)
-    :   is_posarg(construct_prof.posarg),
+    :   
         lname(construct_prof.lname),
         sname(construct_prof.sname),  
-        narg(construct_prof.narg),
         call_limit(construct_prof.call_limit),
-        exclude_point(construct_prof.exclude_point),
+        narg(construct_prof.narg),
+        positional_order(construct_prof.positional_order),
         behave(construct_prof.behave),
+        exclude_point(construct_prof.exclude_point),
         convert_code(construct_prof.convert_code),
-        positional_order(construct_prof.positional_order)
+        is_posarg(construct_prof.posarg)
     {
         construct_prof.verify();
     }

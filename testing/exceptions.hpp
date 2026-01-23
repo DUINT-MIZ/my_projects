@@ -22,7 +22,7 @@ class string_exception : public std::exception {
     private :
     std::string msg;
     public :
-    string_exception(const std::string& err_msg) : msg(err_msg), std::exception() {}
+    string_exception(const std::string& err_msg) : std::exception(), msg(err_msg) {}
 
     const char* what() const noexcept { return msg.data(); }
 };

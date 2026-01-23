@@ -7,6 +7,7 @@
 #include <frozen/string.h>
 #include <type_traits>
 
+#include "commons.hpp"
 #include "exceptions.hpp"
 #include "profiles.hpp"
 
@@ -143,6 +144,7 @@ template <std::size_t IDCount>
 class RuntimeMapper {
     private :
     std::span<profiles::modifiable_profile> mutable_profiles;
+    bool is_verified = false;
     public :
     const Mapper<IDCount>& mapper; // const reference in case mapper is compile-time evaluated object
 
@@ -150,39 +152,24 @@ class RuntimeMapper {
         const Mapper<IDCount>& new_mapper,
         const std::span<profiles::modifiable_profile> new_mutable_profiles
     ) : mutable_profiles(new_mutable_profiles), mapper(new_mapper) 
-    {
-        if(mutable_profiles.size() != mapper.profiles.size())
-            throw std::invalid_argument("mutable profile size doesn't match mapper profile size");
-        std::size_t lim = mapper.profiles.size();
-        for(std::size_t i = 0; i < lim; i++) {
-            const profiles::static_profile& sprof = *mapper[i];
-            profiles::modifiable_profile& mprof = mutable_profiles[i];
-
-            if(mprof.bval.get_code() != values::TypeCode::ARRAY) {
-                if(mprof.bval.get_code() != sprof.convert_code)
-                    throw std::invalid_argument("BoundValue variable reference type is incompatible with static_profile convert code");
-                if(sprof.narg > 1)
-                    throw std::invalid_argument("static_profile narg more than 1 is incompatible with variable reference BoundValue");
-            } else {
-                if(mprof.bval.get_array().viewer.size() < sprof.narg)
-                    throw std::invalid_argument("BoundValue array size is less than static_profile narg");
-            }
-        }
-    }
+    {}
 
     FindPair operator[](std::size_t idx) {
+        if(not is_verified) throw except::ParseError("RuntimeMapper is not initialized");
         const profiles::static_profile* prof = mapper[idx];
         if(!prof) return {nullptr, nullptr};
         return {prof, &mutable_profiles[idx]};
     }
 
     FindPair operator[](const PosargIndex& posarg_index) {
+        if(not is_verified) throw except::ParseError("RuntimeMapper is not initialized");
         const profiles::static_profile* prof = mapper[posarg_index];
         if(!prof) return {nullptr, nullptr};
         return {prof, &mutable_profiles[mapper.profile_index(prof)]};
     }
 
     FindPair operator[](const std::string_view& name) {
+        if(not is_verified) throw except::ParseError("RuntimeMapper is not initialized");
         const profiles::static_profile* prof = mapper[name];
         if(!prof) return {nullptr, nullptr};
         return {prof, &mutable_profiles[mapper.profile_index(prof)]};
@@ -194,6 +181,29 @@ class RuntimeMapper {
 
     std::size_t existing_posarg() const noexcept {
         return mapper.posargs.size();
+    }
+
+    void verify() {
+        if(mutable_profiles.size() != mapper.profiles.size())
+            throw std::invalid_argument("mutable profile size doesn't match mapper profile size");
+        std::size_t lim = mapper.profiles.size();
+        for(std::size_t i = 0; i < lim; i++) {
+            const profiles::static_profile& sprof = *mapper[i];
+            profiles::modifiable_profile& mprof = mutable_profiles[i];
+
+            if(mprof.bval.get_code() != values::TypeCode::ARRAY) {
+                std::cerr << "mprof.bval code is not ARRAY : " << values::code_to_str(mprof.bval.get_code()) << std::endl;
+                if(mprof.bval.get_code() != sprof.convert_code)    
+                    throw std::invalid_argument("BoundValue variable reference type is incompatible with static_profile convert code");
+                
+                if(sprof.narg > 1)
+                    throw std::invalid_argument("static_profile narg more than 1 is incompatible with variable reference BoundValue");
+            } else {
+                if(mprof.bval.get_array().viewer.size() < sprof.narg)
+                    throw std::invalid_argument("BoundValue array size is less than static_profile narg");
+            }
+        }
+        is_verified = true;
     }
 };
 }

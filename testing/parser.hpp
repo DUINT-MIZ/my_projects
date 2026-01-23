@@ -40,7 +40,7 @@ bool convert_and_insert(const FillF& fill, std::string_view input, values::TypeC
     switch(code) {
         case values::TypeCode::DOUBLE :
             {
-                values::DobT buff = 0;
+                DobT buff = 0;
                 from_chars_result_check(
                     std::from_chars(input.data(), input.data() + input.size(), buff),
                     input
@@ -51,7 +51,7 @@ bool convert_and_insert(const FillF& fill, std::string_view input, values::TypeC
 
         case values::TypeCode::INT :
             {
-                values::IntT buff = 0;
+                IntT buff = 0;
                 from_chars_result_check(
                     std::from_chars(input.data(), input.data() + input.size(), buff),
                     input

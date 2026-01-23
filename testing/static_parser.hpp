@@ -1,6 +1,8 @@
 #pragma once
 
+#include <iostream>
 
+#include "commons.hpp"
 #include "exceptions.hpp"
 #include "utils.hpp"
 #include "values.hpp"
@@ -10,7 +12,15 @@
 
 namespace sp {
 
+// main interface to user
+using sp::parser::parse;
 using namespace sp;
+using snOpt = profiles::snOption;
+using dnOpt = profiles::dnOption;
+using posArg = profiles::Posarg;
+using type_code = values::TypeCode;
+using ModProf = profiles::modifiable_profile;
+using PointingArr = values::pointing_arr;
 
 template <std::size_t IDCount, std::size_t... Is>
 constexpr auto
@@ -60,8 +70,16 @@ struct Context {
             throw std::invalid_argument("Unknown name");
         std::size_t index = ptable.profile_index(prof);
         if(index >= mprof.size())
-            throw std::invalid_argument("mprof is out of range");
+            throw std::invalid_argument("Can't get profile : index out of range from mprof");
         return mprof[index];
+    }
+
+    auto get_index_func() const noexcept {
+        return [&](profiles::NameType name) -> NumT {
+            const profiles::static_profile* prof = this->mapper[name];
+            if(!prof) return -1;
+            return this->mapper.profile_index(prof);
+        };
     }
 };
 
@@ -81,5 +99,62 @@ constexpr auto make_context(const Prof&... prof) {
 
     return Context<ids, profile_count, posarg_count>(prof...);
 }
+
+struct Request {
+    ModProf mprof;
+    struct {
+        NameType name;
+        std::size_t placement_index = 0;
+    } request;
+    Request(ModProf new_mprof, NameType new_name)
+        : mprof(std::move(new_mprof)), request{ new_name } {}
+};
+
+template <typename T>
+concept IsRequest = std::is_same_v<std::decay_t<T>, Request>;
+
+template <std::size_t ProfCount, std::size_t IDCount>
+struct RuntimeContext {
+    std::array<sp::ModProf, ProfCount> mprofs{};
+    mapper::RuntimeMapper<IDCount> mapper;
+
+    void apply_request(Request& req) {
+        if(req.request.placement_index >= ProfCount)
+            throw except::SetupError("Request placement index is out of bounds");
+        mprofs[req.request.placement_index] = req.mprof;
+        std::cerr << "Request (" << req.request.name << ") placement index : " << req.request.placement_index << std::endl;
+    }
+
+    template <IsRequest... Req>
+    RuntimeContext(
+        const mapper::Mapper<IDCount>& smapper,
+        Req&&... req
+    )
+    : mapper(smapper, mprofs)
+    {
+        std::cerr << "Runtime context initialize (sizeof) : " << sizeof...(Req) << std::endl;
+        (apply_request(req), ...);
+        mapper.verify();
+    }
+};
+
+template <typename IndexGetF>
+void set_request(const IndexGetF& index_get, Request& req) {
+    NumT idx = index_get(req.request.name);
+    if(idx < 0)
+        throw except::SetupError((std::string("Unknown name of \"") + req.request.name) + "\", in Request");
+    req.request.placement_index = idx;
+}
+
+template <std::size_t IDCount, std::size_t ProfCount, std::size_t PosargCount, IsRequest... Req>
+auto make_rcontext(
+    const Context<IDCount, ProfCount, PosargCount>& ctx,
+    Req&&... req
+) {
+    (set_request(ctx.get_index_func(), req), ...);
+    std::cerr << "rcontext make" << std::endl;
+    return RuntimeContext<ProfCount, IDCount>(ctx.mapper, std::forward<Req>(req)...);
+}
+
 
 }

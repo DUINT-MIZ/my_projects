@@ -6,6 +6,8 @@
 #include <variant>
 #include <type_traits>
 #include <span>
+
+#include "commons.hpp"
 #include "exceptions.hpp"
 
 namespace sp {
@@ -46,17 +48,6 @@ struct unwrap_reference {using type = T; };
 
 template <typename T>
 struct unwrap_reference<std::reference_wrapper<T>> { using type = T; };
-
-using IntT = int;
-using DobT = double;
-using StrT = const char*;
-
-using Blob = std::variant<std::monostate, IntT, DobT, StrT>;
-
-using IntRef = std::reference_wrapper<IntT>;
-using DobRef = std::reference_wrapper<DobT>;
-using StrRef = std::reference_wrapper<StrT>;
-using ArrT = std::span<Blob>;
 
 struct pointing_arr {
 	ArrT viewer;
