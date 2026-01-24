@@ -61,9 +61,13 @@ bool convert_and_insert(const FillF& fill, std::string_view input, values::TypeC
             break;
 
         case values::TypeCode::STRING : 
+        {
             if(input[input.size()] != '\0')
                 throw except::ParseError(std::string("Token : ").append(input) + " Is not null-terminated");
-            return fill((void*)input.data(), values::TypeCode::STRING);
+            std::cout << "Insert string : " << (void*)input.data() << std::endl;
+            const char* dat = input.data();
+            return fill((void*)&dat, values::TypeCode::STRING);
+        }
             break;
 
         default :
@@ -146,8 +150,11 @@ void handle_opt(
     std::size_t eq_idx = 0;
 
     while(!curr_token.empty()) {
-        if((curr_token[0] != '-') or potential_digit(curr_token.data()))
+        if((curr_token[0] != '-') or potential_digit(curr_token.data())) {
             store(curr_token);
+            curr_token = get();
+            continue;
+        }
 
         if((eq_idx = curr_token.find('=')) != std::string_view::npos) {
             eq_value = curr_token.substr((eq_idx + 1), (curr_token.size() - (eq_idx + 1)));

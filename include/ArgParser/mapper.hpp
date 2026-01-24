@@ -80,19 +80,19 @@ class Mapper {
     }
 
     template <std::size_t N>
-    constexpr std::span<const profiles::static_profile*> get_ptable_posarg(const std::array<const profiles::static_profile*, N>& arr)
+    constexpr auto get_ptable_posarg(const std::array<const profiles::static_profile*, N>& arr)
     {
         if constexpr  (N == 0) { 
             return {};
         } else {
-            return std::span<const profiles::static_profile*>(arr);
+            return std::span<const profiles::static_profile* const>(arr);
         }
     }
 
     public :
     const MapType map;
     const std::span<const profiles::static_profile> profiles;
-    const std::span<const profiles::static_profile*> posargs;
+    const std::span<const profiles::static_profile* const> posargs;
 
     template <std::size_t ProfCount, std::size_t PosargCount>
     constexpr Mapper(
